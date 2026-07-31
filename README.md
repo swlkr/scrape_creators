@@ -7,7 +7,7 @@ A zero-dependency Ruby client for the [Scrape Creators API](https://docs.scrapec
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'scrape_creators', '0.1.0'
+gem 'scrape_creators', '0.2.0'
 ```
 
 And then execute:
