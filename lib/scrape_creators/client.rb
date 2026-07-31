@@ -8,6 +8,9 @@ require 'stringio'
 
 module ScrapeCreators
   class Client
+    TIKTOK = 'tiktok'
+    INSTAGRAM = 'instagram'
+
     attr_reader :config, :api_key
 
     def initialize(config = nil, api_key: nil)
@@ -15,22 +18,61 @@ module ScrapeCreators
       @api_key = api_key || @config.api_key
     end
 
-    def posts(username_or_handle, options = {})
-      params = { handle: username_or_handle }.merge(options)
-      res = get("/v2/instagram/user/posts", params)
-      res.is_a?(Hash) ? (res["items"] || []) : []
+    def posts_url_for(source:)
+      case source
+      when TIKTOK then '/v3/tiktok/profile/videos'
+      when INSTAGRAM then '/v2/instagram/user/posts'
+      else '/404'
+      end
+    end
+
+    def post_url_for(source:)
+      case source
+      when TIKTOK then '/v2/tiktok/video'
+      when INSTAGRAM then '/v1/instagram/post'
+      else '/404'
+      end
+    end
+
+    def comments_url_for(source:)
+      case source
+      when TIKTOK then '/v1/tiktok/video/comments'
+      when INSTAGRAM then '/v2/instagram/post/comments'
+      else '/404'
+      end
+    end
+
+    def posts_key_for(source:)
+      case source
+      when TIKTOK then 'aweme_list'
+      when INSTAGRAM then 'items'
+      else 'items'
+      end
+    end
+
+    def posts(handle, options = {})
+      params = { handle: }.merge(options)
+      source = options.dig(:source) || 'instagram'
+      posts_url = posts_url_for(source:)
+      res = get(posts_url, params)
+      key = posts_key_for(source:)
+      res.is_a?(Hash) ? (res[key] || []) : []
     end
 
     def post(url_or_code, options = {})
       url = normalize_url(url_or_code)
+      source = options.dig(:source) || 'instagram'
+      post_url = post_url_for(source:)
       params = { url: url }.merge(options)
-      get("/v1/instagram/post", params)
+      get(post_url, params)
     end
 
     def comments(url_or_code, options = {})
       url = normalize_url(url_or_code)
       params = { url: url }.merge(options)
-      res = get("/v2/instagram/post/comments", params)
+      source = options.dig(:source) || 'instagram'
+      comments_url = comments_url_for(source:)
+      res = get(comments_url, params)
       res.is_a?(Hash) ? (res["comments"] || []) : []
     end
 
