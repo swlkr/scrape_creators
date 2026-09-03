@@ -10,6 +10,7 @@ module ScrapeCreators
   class Client
     TIKTOK = 'tiktok'
     INSTAGRAM = 'instagram'
+    YOUTUBE = 'youtube'
 
     attr_reader :config, :api_key
 
@@ -19,44 +20,80 @@ module ScrapeCreators
     end
 
     def posts_url_for(source:)
-      case source
+      case source.to_s
       when TIKTOK then '/v3/tiktok/profile/videos'
       when INSTAGRAM then '/v2/instagram/user/posts'
+      when YOUTUBE then '/v1/youtube/channel/shorts'
       else '/404'
       end
     end
 
     def post_url_for(source:)
-      case source
+      case source.to_s
       when TIKTOK then '/v2/tiktok/video'
       when INSTAGRAM then '/v1/instagram/post'
+      when YOUTUBE then '/v1/youtube/video'
       else '/404'
       end
     end
 
     def comments_url_for(source:)
-      case source
+      case source.to_s
       when TIKTOK then '/v1/tiktok/video/comments'
       when INSTAGRAM then '/v2/instagram/post/comments'
+      when YOUTUBE then '/v1/youtube/video/comments'
       else '/404'
       end
     end
 
     def posts_key_for(source:)
-      case source
+      case source.to_s
       when TIKTOK then 'aweme_list'
       when INSTAGRAM then 'items'
+      when YOUTUBE then 'shorts'
       else 'items'
       end
     end
 
     def posts(handle, options = {})
-      params = { handle: }.merge(options)
-      source = options.dig(:source) || 'instagram'
-      posts_url = posts_url_for(source:)
-      res = get(posts_url, params)
+      source = (options[:source] || 'instagram').to_s
+      pages = options[:pages] || options[:max_pages] || 1
+      all_items = []
+      cursor = nil
+      has_more = true
+
+      pages.to_i.times do
+        break unless has_more
+
+        page = posts_page(handle, options.merge(cursor: cursor))
+        items = Array(page[:items])
+        all_items.concat(items)
+        cursor = page[:cursor]
+        has_more = page[:has_more] && !cursor.to_s.empty? && !items.empty?
+      end
+
+      all_items
+    end
+
+    def posts_page(handle, options = {})
+      source = (options[:source] || 'instagram').to_s
+      params = { handle: handle }
+      cursor = options[:cursor] || options['cursor']
+      if cursor && !cursor.to_s.empty?
+        params[posts_cursor_param_for(source:)] = cursor
+      end
+      extra = options.reject { |k, _| %w[source cursor max_pages pages].include?(k.to_s) }
+      params.merge!(extra)
+
+      res = get(posts_url_for(source:), params)
       key = posts_key_for(source:)
-      res.is_a?(Hash) ? (res[key] || []) : []
+      items = res.is_a?(Hash) ? (res[key] || []) : []
+      next_cursor = next_posts_cursor(res, source)
+      {
+        items: items,
+        cursor: next_cursor,
+        has_more: posts_has_more?(res, source, next_cursor)
+      }
     end
 
     def post(url_or_code, options = {})
@@ -115,6 +152,39 @@ module ScrapeCreators
     end
 
     private
+
+    def posts_cursor_param_for(source:)
+      case source.to_s
+      when TIKTOK then 'max_cursor'
+      when INSTAGRAM then 'next_max_id'
+      when YOUTUBE then 'continuationToken'
+      else 'cursor'
+      end
+    end
+
+    def next_posts_cursor(res, source)
+      return nil unless res.is_a?(Hash)
+
+      cursor = case source.to_s
+               when TIKTOK then res['max_cursor']
+               when INSTAGRAM then res['next_max_id']
+               when YOUTUBE then res['continuationToken'] || res['continuation_token']
+               else res['cursor']
+               end
+      return nil if cursor.nil? || cursor.to_s.empty? || cursor.to_s == '0'
+
+      cursor
+    end
+
+    def posts_has_more?(res, source, next_cursor)
+      return false unless res.is_a?(Hash)
+
+      if source.to_s == TIKTOK
+        res['has_more'].to_i == 1
+      else
+        !next_cursor.nil?
+      end
+    end
 
     def normalize_url(url_or_code)
       str = url_or_code.to_s.strip
