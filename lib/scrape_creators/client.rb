@@ -55,6 +55,38 @@ module ScrapeCreators
       end
     end
 
+    def search_users(query, source: INSTAGRAM)
+      query = query.to_s.strip
+      raise ArgumentError, 'Search query is required' if query.empty?
+
+      users = case source.to_s
+              when INSTAGRAM
+                response = get('/v1/instagram/search', query: query)
+                search_results(response).dig('data', 'users').to_a.map do |user|
+                  { handle: user['username'], name: user['full_name'], avatar_url: user['profile_pic_url'] }
+                end
+              when TIKTOK
+                response = get('/v1/tiktok/search/users', query: query, trim: true)
+                search_results(response).fetch('users', []).map do |user|
+                  { handle: user['unique_id'], name: user['nickname'], avatar_url: user.dig('avatar_medium', 'url_list', 0) }
+                end
+              when YOUTUBE
+                response = get('/v1/youtube/search', query: query, type: 'channels')
+                search_results(response).fetch('channels', []).map do |channel|
+                  { handle: channel['handle'], name: channel['title'], avatar_url: channel['thumbnail'] }
+                end
+              else
+                raise ArgumentError, "Unsupported search source: #{source}"
+              end
+
+      users.filter_map do |user|
+        handle = user[:handle].to_s.strip.delete_prefix('@')
+        next if handle.empty? || handle.match?(%r{[[:space:]/]})
+
+        user.merge(handle: handle)
+      end.uniq { |user| user[:handle].downcase }
+    end
+
     def posts(handle, options = {})
       source = (options[:source] || 'instagram').to_s
       pages = options[:pages] || options[:max_pages] || 1
@@ -152,6 +184,14 @@ module ScrapeCreators
     end
 
     private
+
+    def search_results(response)
+      unless response.is_a?(Hash) && response['success'] != false
+        raise APIError, 'Account search failed'
+      end
+
+      response
+    end
 
     def posts_cursor_param_for(source:)
       case source.to_s

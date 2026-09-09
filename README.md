@@ -88,3 +88,21 @@ comments = scraper.comments("https://www.instagram.com/p/DKSMEpKRd6h/")
 ## License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+
+## Account search
+
+```ruby
+client.search_users("sean walker", source: "instagram")
+client.search_users("sean walker", source: "tiktok")
+client.search_users("sean walker", source: "youtube")
+# => [{ handle: "seanwalker", name: "Sean Walker", avatar_url: "https://..." }]
+```
+
+Returns one page of accounts, deduplicated by handle. YouTube searches channels,
+whose handles can be passed to `posts_page` to fetch Shorts. Results without a
+usable handle are omitted. Blank queries and unsupported sources raise
+`ArgumentError`; unsuccessful API responses raise `ScrapeCreators::APIError`.
+
+Endpoints: [Instagram](https://docs.scrapecreators.com/v1/instagram/search/),
+[TikTok](https://docs.scrapecreators.com/v1/tiktok/search/users/),
+[YouTube](https://docs.scrapecreators.com/v1/youtube/search/).
